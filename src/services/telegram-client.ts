@@ -204,6 +204,23 @@ export async function fetchBotRelatedMessageIds(chatId: number, maxScan = 500): 
   return result;
 }
 
+export async function searchMessages(chatId: number, keyword: string, limit: number): Promise<FetchedMessage[]> {
+  const c = ensureClient();
+  const messages = await c.getMessages(chatId, {
+    search: keyword,
+    limit,
+  });
+
+  const result: FetchedMessage[] = [];
+  for (const msg of messages) {
+    const extracted = extractMessage(msg);
+    if (extracted) result.push(extracted);
+  }
+
+  // getMessages with search returns newest first; reverse for chronological order
+  return result.reverse();
+}
+
 export async function disconnectTelegramClient(): Promise<void> {
   if (client) {
     await client.disconnect();
