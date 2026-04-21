@@ -2,6 +2,11 @@ import type { Bot } from "grammy";
 import { chatWithAI, postProcessResponse, type ChatMessage } from "../services/chat.js";
 import { trackMessage } from "../services/message-tracker.js";
 import { config } from "../config.js";
+import type { FetchedMessage } from "../services/telegram-client.js";
+
+export interface ChatTelegramClient {
+  fetchMessages(chatId: number, limit: number): Promise<FetchedMessage[]>;
+}
 
 // Rate limiter: tracks last response time per (chatId, userId)
 const rateLimitMap = new Map<string, number>();
@@ -57,7 +62,7 @@ function addToMemory(chatId: number, role: "user" | "assistant", content: string
   }
 }
 
-export function registerChatHandler(bot: Bot): void {
+export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient): void {
   // Fetch bot username once at startup
   let botUsername: string | null = null;
   bot.api.getMe().then((me) => {
@@ -120,10 +125,28 @@ export function registerChatHandler(bot: Bot): void {
         reply_parameters: { message_id: message.message_id },
       });
 
+      // Fetch recent group messages for context
+      let groupContext: string | undefined;
+      try {
+        const recentMessages = await telegramClient.fetchMessages(chatId, 50);
+        const lines = recentMessages
+          .filter((m) => m.text.trim().length > 0)
+          .map((m) => {
+            const d = new Date(m.timestamp * 1000);
+            const hh = String(d.getHours()).padStart(2, "0");
+            const mm = String(d.getMinutes()).padStart(2, "0");
+            return `[${hh}:${mm}] ${m.username || m.senderName}: ${m.text}`;
+          });
+        groupContext = lines.length > 0 ? lines.join("\n") : undefined;
+      } catch (fetchErr) {
+        console.warn("[Chat] Failed to fetch group context:", fetchErr);
+        groupContext = undefined;
+      }
+
       let aiResponse: string;
       try {
         const context = getRecentContext(chatId);
-        aiResponse = await chatWithAI(cleanText, context);
+        aiResponse = await chatWithAI(cleanText, context, groupContext);
       } catch (err) {
         console.error("[Chat] AI error:", err);
         await ctx.api.editMessageText(chatId, reply.message_id, "lỗi rồi, thử lại sau đi");

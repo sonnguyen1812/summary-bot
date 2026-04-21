@@ -1,13 +1,13 @@
 {
   "repoPath": "D:\\tools\\summary-bot",
-  "lastCommit": "",
-  "indexedAt": "2026-04-19T11:04:54.221Z",
+  "lastCommit": "8f2c09c49e938759842bf49a91b80db20de17030",
+  "indexedAt": "2026-04-21T09:18:40.199Z",
   "stats": {
-    "files": 20,
-    "nodes": 219,
-    "edges": 266,
-    "communities": 8,
-    "processes": 4,
+    "files": 44,
+    "nodes": 467,
+    "edges": 577,
+    "communities": 11,
+    "processes": 9,
     "embeddings": 0
   }
 }

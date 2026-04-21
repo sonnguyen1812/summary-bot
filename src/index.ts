@@ -27,7 +27,7 @@ registerSummaryHandler(bot);
 registerClearHandler(bot);
 registerQueryHandler(bot, { searchMessages });
 registerAskHandler(bot, { fetchMessages });
-registerChatHandler(bot);
+registerChatHandler(bot, { fetchMessages });
 console.log("[Bot] Handlers registered.");
 
 // Graceful shutdown
