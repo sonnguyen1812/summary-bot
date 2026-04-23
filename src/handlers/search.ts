@@ -1,35 +1,12 @@
 import type { Bot } from "grammy";
 import { trackMessage } from "../services/message-tracker.js";
 import { webSearch } from "../services/summarizer.js";
+import { TELEGRAM_MSG_LIMIT } from "../constants.js";
+import { RateLimiter } from "../rate-limiter.js";
 
-const SEARCH_RATE_LIMIT_SECONDS = 10;
-const TELEGRAM_MSG_LIMIT = 4096;
+const MAX_QUERY_LENGTH = 300;
 
-const rateLimitMap = new Map<string, number>();
-
-function isRateLimited(userId: string): number | null {
-  const now = Date.now() / 1000;
-  const lastTime = rateLimitMap.get(userId);
-  if (lastTime !== undefined) {
-    const elapsed = now - lastTime;
-    if (elapsed < SEARCH_RATE_LIMIT_SECONDS) {
-      return Math.ceil(SEARCH_RATE_LIMIT_SECONDS - elapsed);
-    }
-  }
-  return null;
-}
-
-function recordRateLimit(userId: string): void {
-  rateLimitMap.set(userId, Date.now() / 1000);
-  if (rateLimitMap.size > 1000) {
-    const now = Date.now() / 1000;
-    for (const [key, timestamp] of rateLimitMap) {
-      if (now - timestamp > SEARCH_RATE_LIMIT_SECONDS) {
-        rateLimitMap.delete(key);
-      }
-    }
-  }
-}
+const rateLimiter = new RateLimiter(10);
 
 export function registerSearchHandler(bot: Bot): void {
   bot.command("search", async (ctx) => {
@@ -44,10 +21,14 @@ export function registerSearchHandler(bot: Bot): void {
       return;
     }
 
+    const truncatedQuery = query.length > MAX_QUERY_LENGTH
+      ? query.slice(0, MAX_QUERY_LENGTH)
+      : query;
+
     const userId = ctx.from?.id?.toString();
     if (!userId) return;
 
-    const remaining = isRateLimited(userId);
+    const remaining = rateLimiter.check(userId);
     if (remaining !== null) {
       await ctx.reply(`Vui lòng chờ ${remaining} giây trước khi tìm kiếm lại.`);
       return;
@@ -58,10 +39,10 @@ export function registerSearchHandler(bot: Bot): void {
 
     const loadingMsg = await ctx.reply("🔍 Đang tìm kiếm...");
     const loadingMsgId = loadingMsg.message_id;
-    recordRateLimit(userId);
+    rateLimiter.record(userId);
 
     try {
-      const result = await webSearch(query);
+      const result = await webSearch(truncatedQuery);
 
       // Truncate if over Telegram limit
       const text = result.length > TELEGRAM_MSG_LIMIT

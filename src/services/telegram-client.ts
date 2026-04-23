@@ -2,11 +2,13 @@ import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import { Api } from "telegram";
 import { readFileSync, writeFileSync, existsSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import { config } from "../config.js";
+import { botUserId } from "../constants.js";
 
-export const SESSION_FILE = "./data/session.txt";
-
-const botUserId = parseInt(config.botToken.split(":")[0], 10);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+export const SESSION_FILE = resolve(__dirname, "../../data/session.txt");
 
 let client: TelegramClient;
 
@@ -44,6 +46,9 @@ export async function initTelegramClient(): Promise<void> {
     await client.connect();
     console.log("[MTProto] Connected with existing session.");
   } else {
+    if (!process.stdin.isTTY) {
+      throw new Error("[MTProto] No saved session and stdin is not a TTY. Run `npx tsx src/login.ts` interactively first.");
+    }
     // First time — need interactive login
     const readline = await import("readline");
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });

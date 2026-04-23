@@ -128,14 +128,6 @@ export async function enrichSearchResults(
     .join("\n\n---\n\n");
 }
 
-export function formatSearchResultsForAI(results: BraveSearchResult[]): string {
-  if (results.length === 0) return "Không tìm thấy kết quả nào.";
-
-  return results
-    .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.description}`)
-    .join("\n\n");
-}
-
 export function formatCitations(results: BraveSearchResult[], maxCitations: number = 3): string {
   if (results.length === 0) return "";
 

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
+import { withRetry } from "../retry.js";
 
 const client = new Anthropic({
   apiKey: config.aiApiKey,
@@ -81,19 +82,21 @@ export async function chatWithAI(userMessage: string, context?: ChatMessage[], g
     ? `${CHAT_SYSTEM_PROMPT}\n\n<recent_chat>\n${groupContext}\n</recent_chat>`
     : CHAT_SYSTEM_PROMPT;
 
-  const response = await client.messages.create({
-    model: config.aiModel,
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages,
-  }, { timeout: API_TIMEOUT_MS });
+  return withRetry(async () => {
+    const response = await client.messages.create({
+      model: config.aiModel,
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages,
+    }, { timeout: API_TIMEOUT_MS });
 
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text" || !textBlock.text) {
-    throw new Error("Empty response from AI API");
-  }
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (!textBlock || textBlock.type !== "text" || !textBlock.text) {
+      throw new Error("Empty response from AI API");
+    }
 
-  return textBlock.text;
+    return textBlock.text;
+  }, undefined, 2);
 }
 
 export function postProcessResponse(text: string): string {

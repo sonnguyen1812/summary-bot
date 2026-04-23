@@ -19,6 +19,8 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY package.json ./
 
-RUN mkdir -p data
+RUN mkdir -p data && chown node:node data
+
+USER node
 
 CMD ["node", "dist/index.js"]

@@ -1,38 +1,14 @@
 import type { Bot } from "grammy";
+import { TELEGRAM_MSG_LIMIT } from "../constants.js";
+import { RateLimiter } from "../rate-limiter.js";
 
 interface QueryTelegramClient {
   searchMessages(chatId: number, keyword: string, limit: number): Promise<{ senderName: string; username: string | null; text: string; timestamp: number }[]>;
 }
 
-const QUERY_RATE_LIMIT_SECONDS = 10;
 const QUERY_RESULT_LIMIT = 30;
-const TELEGRAM_MSG_LIMIT = 4096;
 
-const rateLimitMap = new Map<string, number>();
-
-function isRateLimited(userId: string): number | null {
-  const now = Date.now() / 1000;
-  const lastTime = rateLimitMap.get(userId);
-  if (lastTime !== undefined) {
-    const elapsed = now - lastTime;
-    if (elapsed < QUERY_RATE_LIMIT_SECONDS) {
-      return Math.ceil(QUERY_RATE_LIMIT_SECONDS - elapsed);
-    }
-  }
-  return null;
-}
-
-function recordRateLimit(userId: string): void {
-  rateLimitMap.set(userId, Date.now() / 1000);
-  if (rateLimitMap.size > 1000) {
-    const now = Date.now() / 1000;
-    for (const [key, timestamp] of rateLimitMap) {
-      if (now - timestamp > QUERY_RATE_LIMIT_SECONDS) {
-        rateLimitMap.delete(key);
-      }
-    }
-  }
-}
+const rateLimiter = new RateLimiter(10);
 
 function formatQueryResult(msg: { senderName: string; username: string | null; text: string; timestamp: number }): string {
   const date = new Date(msg.timestamp * 1000);
@@ -61,7 +37,7 @@ export function registerQueryHandler(bot: Bot, telegramClient: QueryTelegramClie
     const userId = ctx.from?.id?.toString();
     if (!userId) return;
 
-    const remaining = isRateLimited(userId);
+    const remaining = rateLimiter.check(userId);
     if (remaining !== null) {
       await ctx.reply(`Vui lòng chờ ${remaining} giây trước khi tìm kiếm lại.`);
       return;
@@ -69,9 +45,9 @@ export function registerQueryHandler(bot: Bot, telegramClient: QueryTelegramClie
 
     const chatId = ctx.chat.id;
 
+    rateLimiter.record(userId);
     try {
       const messages = await telegramClient.searchMessages(chatId, keyword, QUERY_RESULT_LIMIT);
-      recordRateLimit(userId);
 
       if (messages.length === 0) {
         await ctx.reply(`Không tìm thấy tin nhắn nào chứa từ khóa "${keyword}".`);
@@ -90,10 +66,18 @@ export function registerQueryHandler(bot: Bot, telegramClient: QueryTelegramClie
       if (fullText.length <= TELEGRAM_MSG_LIMIT) {
         await ctx.reply(fullText);
       } else {
-        // Split at midpoint on newline boundary
-        const mid = Math.floor(lines.length / 2);
-        await ctx.reply(header + lines.slice(0, mid).join("\n"));
-        await ctx.reply(lines.slice(mid).join("\n"));
+        // Split into chunks that fit within Telegram's limit
+        let remaining = fullText;
+        while (remaining.length > 0) {
+          if (remaining.length <= TELEGRAM_MSG_LIMIT) {
+            await ctx.reply(remaining);
+            break;
+          }
+          let splitAt = remaining.lastIndexOf("\n", TELEGRAM_MSG_LIMIT);
+          if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
+          await ctx.reply(remaining.slice(0, splitAt));
+          remaining = remaining.slice(splitAt).trimStart();
+        }
       }
     } catch (err) {
       console.error("[Query] MTProto search error:", err);

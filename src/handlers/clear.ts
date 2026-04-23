@@ -12,16 +12,26 @@ export function registerClearHandler(bot: Bot): void {
     const chatId = ctx.chat.id;
     const clearCmdId = ctx.message?.message_id;
 
-    // Fetch all bot messages + /summary commands via MTProto
+    // Fetch all bot messages + command messages via MTProto
     const messageIds = await fetchBotRelatedMessageIds(chatId);
 
     let deleted = 0;
-    for (const msgId of messageIds) {
+    // Telegram supports deleting up to 100 messages at once
+    for (let i = 0; i < messageIds.length; i += 100) {
+      const batch = messageIds.slice(i, i + 100);
       try {
-        await ctx.api.deleteMessage(chatId, msgId);
-        deleted++;
+        await ctx.api.raw.deleteMessages({ chat_id: chatId, message_ids: batch });
+        deleted += batch.length;
       } catch {
-        // Message already deleted or too old — ignore
+        // Fallback to individual deletes if batch fails
+        for (const msgId of batch) {
+          try {
+            await ctx.api.deleteMessage(chatId, msgId);
+            deleted++;
+          } catch {
+            // Message already deleted or too old
+          }
+        }
       }
     }
 

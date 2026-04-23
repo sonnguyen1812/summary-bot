@@ -3,9 +3,9 @@ import { InlineKeyboard } from "grammy";
 import { config } from "../config.js";
 import { fetchMessages, fetchMessagesSince } from "../services/telegram-client.js";
 import { summarizeMessages, isQuotaError, type SummaryMeta } from "../services/summarizer.js";
-import { trackMessage, trackSummaryCaller } from "../services/message-tracker.js";
-
-const TELEGRAM_MSG_LIMIT = 4096;
+import { trackMessage } from "../services/message-tracker.js";
+import { TELEGRAM_MSG_LIMIT } from "../constants.js";
+import { RateLimiter } from "../rate-limiter.js";
 
 function splitMessage(text: string): string[] {
   if (text.length <= TELEGRAM_MSG_LIMIT) return [text];
@@ -25,34 +25,8 @@ function splitMessage(text: string): string[] {
   return parts;
 }
 
-const rateLimitMap = new Map<string, number>();
+const rateLimiter = new RateLimiter(config.rateLimitSeconds);
 const pendingKeyboards = new Map<string, ReturnType<typeof setTimeout>>();
-
-function isRateLimited(chatId: string): number | null {
-  const now = Date.now() / 1000;
-  const lastTime = rateLimitMap.get(chatId);
-  if (lastTime !== undefined) {
-    const elapsed = now - lastTime;
-    if (elapsed < config.rateLimitSeconds) {
-      return Math.ceil(config.rateLimitSeconds - elapsed);
-    }
-  }
-  return null;
-}
-
-function recordRateLimit(chatId: string): void {
-  rateLimitMap.set(chatId, Date.now() / 1000);
-
-  // Cleanup expired entries to prevent memory leak
-  if (rateLimitMap.size > 1000) {
-    const now = Date.now() / 1000;
-    for (const [key, timestamp] of rateLimitMap) {
-      if (now - timestamp > config.rateLimitSeconds) {
-        rateLimitMap.delete(key);
-      }
-    }
-  }
-}
 
 type SummaryQuery =
   | { type: "count"; count: number; label: string }
@@ -134,7 +108,6 @@ export function registerSummaryHandler(bot: Bot): void {
     const chatIdStr = chatId.toString();
 
     if (ctx.message) trackMessage(chatId, ctx.message.message_id);
-    if (ctx.from) trackSummaryCaller(chatId, ctx.from.id);
 
     const argStr = ctx.match?.trim();
 
@@ -148,16 +121,16 @@ export function registerSummaryHandler(bot: Bot): void {
         return;
       }
 
-      const remaining = isRateLimited(chatIdStr);
+      const remaining = rateLimiter.check(chatIdStr);
       if (remaining !== null) {
         const rateLimitReply = await ctx.reply(`Vui lòng chờ ${remaining} giây trước khi dùng lệnh này lại.`);
         trackMessage(chatId, rateLimitReply.message_id);
         return;
       }
 
+      rateLimiter.record(chatIdStr);
       try {
         const summary = await executeSummary(chatId, query);
-        recordRateLimit(chatIdStr);
         const parts = splitMessage(summary);
         for (const part of parts) {
           try {
@@ -231,7 +204,7 @@ export function registerSummaryHandler(bot: Bot): void {
       return;
     }
 
-    const remaining = isRateLimited(chatIdStr);
+    const remaining = rateLimiter.check(chatIdStr);
     if (remaining !== null) {
       await ctx.answerCallbackQuery({
         text: `Vui lòng chờ ${remaining} giây.`,
@@ -258,9 +231,9 @@ export function registerSummaryHandler(bot: Bot): void {
       console.warn("[Summary] Failed to edit progress message:", err);
     }
 
+    rateLimiter.record(chatIdStr);
     try {
       const summary = await executeSummary(chatId, query);
-      recordRateLimit(chatIdStr);
       const parts = splitMessage(summary);
       // Edit original message with first part
       try {

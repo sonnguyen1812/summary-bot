@@ -1,30 +1,15 @@
 import type { Bot } from "grammy";
 import { chatWithAI, postProcessResponse, type ChatMessage } from "../services/chat.js";
 import { trackMessage } from "../services/message-tracker.js";
-import { config } from "../config.js";
+import { botUserId } from "../constants.js";
+import { RateLimiter } from "../rate-limiter.js";
 import type { FetchedMessage } from "../services/telegram-client.js";
 
 export interface ChatTelegramClient {
   fetchMessages(chatId: number, limit: number): Promise<FetchedMessage[]>;
 }
 
-// Rate limiter: tracks last response time per (chatId, userId)
-const rateLimitMap = new Map<string, number>();
-const RATE_LIMIT_MS = 10_000; // 10 seconds
-
-function isRateLimited(chatId: number, userId: number): boolean {
-  const key = `${chatId}:${userId}`;
-  const last = rateLimitMap.get(key) ?? 0;
-  return Date.now() - last < RATE_LIMIT_MS;
-}
-
-function markUsed(chatId: number, userId: number): void {
-  const key = `${chatId}:${userId}`;
-  rateLimitMap.set(key, Date.now());
-}
-
-// Derive bot user ID from bot token (first segment before the colon)
-const botUserId = parseInt(config.botToken.split(":")[0], 10);
+const rateLimiter = new RateLimiter(10);
 
 // Conversation memory per chat
 interface StoredMessage {
@@ -35,6 +20,7 @@ interface StoredMessage {
 
 const chatMemory = new Map<number, StoredMessage[]>();
 const MAX_MEMORY_PER_CHAT = 30;
+const MAX_CHATS = 500;
 const MEMORY_TTL_MS = 12 * 60 * 60 * 1000;
 
 function getRecentContext(chatId: number): ChatMessage[] {
@@ -43,6 +29,10 @@ function getRecentContext(chatId: number): ChatMessage[] {
 
   const now = Date.now();
   const fresh = messages.filter((m) => now - m.timestamp < MEMORY_TTL_MS);
+  if (fresh.length === 0) {
+    chatMemory.delete(chatId);
+    return [];
+  }
   if (fresh.length !== messages.length) {
     chatMemory.set(chatId, fresh);
   }
@@ -60,12 +50,22 @@ function addToMemory(chatId: number, role: "user" | "assistant", content: string
   while (messages.length > MAX_MEMORY_PER_CHAT) {
     messages.shift();
   }
+
+  // Evict oldest chats if too many are tracked
+  if (chatMemory.size > MAX_CHATS) {
+    const now = Date.now();
+    for (const [id, msgs] of chatMemory) {
+      if (msgs.length === 0 || now - msgs[msgs.length - 1].timestamp > MEMORY_TTL_MS) {
+        chatMemory.delete(id);
+      }
+    }
+  }
 }
 
 export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient): void {
-  // Fetch bot username once at startup
+  // Fetch bot username once at startup — block first message until resolved
   let botUsername: string | null = null;
-  bot.api.getMe().then((me) => {
+  const botInfoReady = bot.api.getMe().then((me) => {
     botUsername = me.username ?? null;
     console.log(`[Chat] Bot username: @${botUsername}`);
   }).catch((err) => {
@@ -73,6 +73,8 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
   });
 
   bot.on("message", async (ctx) => {
+    // Wait for bot info on first message (typically resolves instantly)
+    await botInfoReady;
     // Only handle group/supergroup messages
     const chatType = ctx.chat.type;
     if (chatType === "private") return;
@@ -100,10 +102,11 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
     if (message.entities?.some((e) => e.type === "bot_command")) return;
 
     // Rate limit check
-    if (isRateLimited(chatId, userId)) {
+    const rateLimitKey = `${chatId}:${userId}`;
+    if (rateLimiter.check(rateLimitKey) !== null) {
       return;
     }
-    markUsed(chatId, userId);
+    rateLimiter.record(rateLimitKey);
 
     // Strip @botusername mention(s) from the text before sending to AI
     let cleanText = text;
