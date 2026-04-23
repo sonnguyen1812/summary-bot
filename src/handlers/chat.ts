@@ -34,8 +34,8 @@ interface StoredMessage {
 }
 
 const chatMemory = new Map<number, StoredMessage[]>();
-const MAX_MEMORY_PER_CHAT = 8; // 4 exchanges
-const MEMORY_TTL_MS = 60 * 60 * 1000; // 1 hour
+const MAX_MEMORY_PER_CHAT = 30;
+const MEMORY_TTL_MS = 12 * 60 * 60 * 1000;
 
 function getRecentContext(chatId: number): ChatMessage[] {
   const messages = chatMemory.get(chatId);
