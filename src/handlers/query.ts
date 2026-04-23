@@ -7,6 +7,7 @@ interface QueryTelegramClient {
 }
 
 const QUERY_RESULT_LIMIT = 30;
+const MAX_KEYWORD_LENGTH = 200;
 
 const rateLimiter = new RateLimiter(10);
 
@@ -34,6 +35,10 @@ export function registerQueryHandler(bot: Bot, telegramClient: QueryTelegramClie
       return;
     }
 
+    const truncatedKeyword = keyword.length > MAX_KEYWORD_LENGTH
+      ? keyword.slice(0, MAX_KEYWORD_LENGTH)
+      : keyword;
+
     const userId = ctx.from?.id?.toString();
     if (!userId) return;
 
@@ -47,18 +52,18 @@ export function registerQueryHandler(bot: Bot, telegramClient: QueryTelegramClie
 
     rateLimiter.record(userId);
     try {
-      const messages = await telegramClient.searchMessages(chatId, keyword, QUERY_RESULT_LIMIT);
+      const messages = await telegramClient.searchMessages(chatId, truncatedKeyword, QUERY_RESULT_LIMIT);
 
       if (messages.length === 0) {
-        await ctx.reply(`Không tìm thấy tin nhắn nào chứa từ khóa "${keyword}".`);
+        await ctx.reply(`Không tìm thấy tin nhắn nào chứa từ khóa "${truncatedKeyword}".`);
         return;
       }
 
       const lines = messages.map(formatQueryResult);
       const isCapped = messages.length === QUERY_RESULT_LIMIT;
       const header = isCapped
-        ? `🔍 Hiển thị ${QUERY_RESULT_LIMIT} kết quả gần nhất cho "${keyword}":\n\n`
-        : `🔍 Tìm thấy ${messages.length} kết quả cho "${keyword}":\n\n`;
+        ? `🔍 Hiển thị ${QUERY_RESULT_LIMIT} kết quả gần nhất cho "${truncatedKeyword}":\n\n`
+        : `🔍 Tìm thấy ${messages.length} kết quả cho "${truncatedKeyword}":\n\n`;
 
       const body = lines.join("\n");
       const fullText = header + body;
@@ -74,7 +79,10 @@ export function registerQueryHandler(bot: Bot, telegramClient: QueryTelegramClie
             break;
           }
           let splitAt = remaining.lastIndexOf("\n", TELEGRAM_MSG_LIMIT);
-          if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
+          if (splitAt <= 0) {
+            splitAt = remaining.lastIndexOf(" ", TELEGRAM_MSG_LIMIT);
+            if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
+          }
           await ctx.reply(remaining.slice(0, splitAt));
           remaining = remaining.slice(splitAt).trimStart();
         }

@@ -1,17 +1,43 @@
 import type { Bot } from "grammy";
 import { trackMessage } from "../services/message-tracker.js";
-import { webSearch } from "../services/summarizer.js";
+import { webSearch, isQuotaError } from "../services/summarizer.js";
 import { TELEGRAM_MSG_LIMIT } from "../constants.js";
+import { config } from "../config.js";
 import { RateLimiter } from "../rate-limiter.js";
 
 const MAX_QUERY_LENGTH = 300;
 
 const rateLimiter = new RateLimiter(10);
 
+function splitMessage(text: string): string[] {
+  if (text.length <= TELEGRAM_MSG_LIMIT) return [text];
+  const parts: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= TELEGRAM_MSG_LIMIT) {
+      parts.push(remaining);
+      break;
+    }
+    let splitAt = remaining.lastIndexOf("\n", TELEGRAM_MSG_LIMIT);
+    if (splitAt <= 0) {
+      splitAt = remaining.lastIndexOf(" ", TELEGRAM_MSG_LIMIT);
+      if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
+    }
+    parts.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  return parts;
+}
+
 export function registerSearchHandler(bot: Bot): void {
   bot.command("search", async (ctx) => {
     if (ctx.chat.type === "private") {
       await ctx.reply("Lệnh này chỉ hoạt động trong group.");
+      return;
+    }
+
+    if (!config.braveApiKey) {
+      await ctx.reply("Tính năng tìm kiếm web chưa được kích hoạt.");
       return;
     }
 
@@ -43,21 +69,25 @@ export function registerSearchHandler(bot: Bot): void {
 
     try {
       const result = await webSearch(truncatedQuery);
+      const parts = splitMessage(result);
 
-      // Truncate if over Telegram limit
-      const text = result.length > TELEGRAM_MSG_LIMIT
-        ? result.slice(0, TELEGRAM_MSG_LIMIT - 3) + "..."
-        : result;
-
-      await ctx.api.editMessageText(chatIdStr, loadingMsgId, text);
+      await ctx.api.editMessageText(chatIdStr, loadingMsgId, parts[0]);
       trackMessage(chatId, loadingMsgId);
+
+      for (let i = 1; i < parts.length; i++) {
+        const sent = await ctx.api.sendMessage(chatIdStr, parts[i]);
+        trackMessage(chatId, sent.message_id);
+      }
     } catch (err) {
       console.error("[Search] Error:", err);
+      const errorMsg = isQuotaError(err)
+        ? "⚠️ Đã hết lượt gọi AI. Vui lòng thử lại sau vài phút hoặc ngày mai."
+        : "Không thể tìm kiếm lúc này. Vui lòng thử lại sau.";
       try {
-        await ctx.api.editMessageText(chatIdStr, loadingMsgId, "Không thể tìm kiếm lúc này. Vui lòng thử lại sau.");
+        await ctx.api.editMessageText(chatIdStr, loadingMsgId, errorMsg);
       } catch (editErr) {
         console.warn("[Search] Failed to edit error message:", editErr);
-        await ctx.reply("Không thể tìm kiếm lúc này. Vui lòng thử lại sau.");
+        await ctx.reply(errorMsg);
       }
     }
   });

@@ -25,6 +25,10 @@ export class RateLimiter {
     this.cleanup();
   }
 
+  unrecord(key: string): void {
+    this.map.delete(key);
+  }
+
   private cleanup(): void {
     if (this.map.size <= this.maxEntries) return;
     const now = Date.now() / 1000;

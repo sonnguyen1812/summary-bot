@@ -60,7 +60,7 @@ SỬ DỤNG CONTEXT CUỘC TRÒ CHUYỆN:
 - Không nhắc đến việc mày đang đọc "recent chat" hay "lịch sử" — cứ trả lời tự nhiên như mày đã ở trong cuộc trò chuyện đó`;
 
 const API_TIMEOUT_MS = 30_000;
-const MAX_INPUT_CHARS = 1000;
+export const MAX_INPUT_CHARS = 1000;
 
 export interface ChatMessage {
   role: "user" | "assistant";

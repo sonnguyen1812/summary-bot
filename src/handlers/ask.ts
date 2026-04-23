@@ -1,6 +1,6 @@
 import type { Bot } from "grammy";
 import type { FetchedMessage } from "../services/telegram-client.js";
-import { askQuestion } from "../services/summarizer.js";
+import { askQuestion, isQuotaError } from "../services/summarizer.js";
 import { RateLimiter } from "../rate-limiter.js";
 
 interface AskTelegramClient {
@@ -31,18 +31,20 @@ export function registerAskHandler(bot: Bot, telegramClient: AskTelegramClient):
 
     const chatId = ctx.chat.id;
     const chatIdStr = chatId.toString();
+    const userId = ctx.from?.id?.toString();
+    if (!userId) return;
 
-    const remaining = rateLimiter.check(chatIdStr);
+    const remaining = rateLimiter.check(userId);
     if (remaining !== null) {
       await ctx.reply(`Vui lòng chờ ${remaining} giây trước khi hỏi lại.`);
       return;
     }
 
     // Send loading indicator
-    const loadingMsg = await ctx.reply("🔍 Đang tìm kiếm...");
+    const loadingMsg = await ctx.reply("💭 Đang phân tích...");
     const loadingMsgId = loadingMsg.message_id;
 
-    rateLimiter.record(chatIdStr);
+    rateLimiter.record(userId);
     try {
       const messages = await telegramClient.fetchMessages(chatId, ASK_FETCH_COUNT);
 
@@ -51,11 +53,14 @@ export function registerAskHandler(bot: Bot, telegramClient: AskTelegramClient):
       await ctx.api.editMessageText(chatIdStr, loadingMsgId, answer);
     } catch (err) {
       console.error("[Ask] Error:", err);
+      const errorMsg = isQuotaError(err)
+        ? "⚠️ Đã hết lượt gọi AI. Vui lòng thử lại sau vài phút hoặc ngày mai."
+        : "Không thể trả lời lúc này. Vui lòng thử lại sau.";
       try {
-        await ctx.api.editMessageText(chatIdStr, loadingMsgId, "Không thể trả lời lúc này. Vui lòng thử lại sau.");
+        await ctx.api.editMessageText(chatIdStr, loadingMsgId, errorMsg);
       } catch (editErr) {
         console.warn("[Ask] Failed to edit error message:", editErr);
-        await ctx.reply("Không thể trả lời lúc này. Vui lòng thử lại sau.");
+        await ctx.reply(errorMsg);
       }
     }
   });

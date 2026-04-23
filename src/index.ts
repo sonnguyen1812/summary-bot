@@ -1,7 +1,7 @@
 import { createServer } from "http";
 import { config } from "./config.js";
 import { bot } from "./bot.js";
-import { initTelegramClient, disconnectTelegramClient, fetchMessages, searchMessages } from "./services/telegram-client.js";
+import { initTelegramClient, disconnectTelegramClient, fetchMessages, searchMessages, fetchBotRelatedMessageIds } from "./services/telegram-client.js";
 import { registerSummaryHandler } from "./handlers/summary.js";
 import { registerClearHandler } from "./handlers/clear.js";
 import { registerQueryHandler } from "./handlers/query.js";
@@ -25,7 +25,7 @@ console.log("[Bot] MTProto client initialized.");
 
 // Register handlers (command handlers first, then message handlers)
 registerSummaryHandler(bot);
-registerClearHandler(bot);
+registerClearHandler(bot, { fetchBotRelatedMessageIds });
 registerQueryHandler(bot, { searchMessages });
 registerAskHandler(bot, { fetchMessages });
 registerSearchHandler(bot);
@@ -50,7 +50,7 @@ bot.api.setMyCommands([
   { command: "query", description: "Tìm kiếm tin nhắn theo từ khóa (VD: /query họp nhóm)" },
   { command: "ask", description: "Hỏi AI về nội dung trò chuyện (VD: /ask Hôm nay bàn gì?)" },
   { command: "search", description: "Tìm kiếm web (VD: /search giá bitcoin hôm nay)" },
-  { command: "clear", description: "Xóa tin nhắn bot và lệnh /summary" },
+  { command: "clear", description: "Xóa tin nhắn bot và các lệnh (admin only)" },
 ]).then(() => {
   console.log("[Bot] Commands registered.");
 }).catch((err) => {

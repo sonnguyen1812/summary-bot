@@ -18,7 +18,10 @@ function splitMessage(text: string): string[] {
     }
     // Try to split at last newline before limit
     let splitAt = remaining.lastIndexOf("\n", TELEGRAM_MSG_LIMIT);
-    if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
+    if (splitAt <= 0) {
+      splitAt = remaining.lastIndexOf(" ", TELEGRAM_MSG_LIMIT);
+      if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
+    }
     parts.push(remaining.slice(0, splitAt));
     remaining = remaining.slice(splitAt).trimStart();
   }
@@ -78,10 +81,14 @@ async function executeSummary(
   query: SummaryQuery,
 ): Promise<string> {
   let messages;
+  let capped = false;
   if (query.type === "count") {
     messages = await fetchMessages(chatId, query.count);
   } else {
     messages = await fetchMessagesSince(chatId, query.sinceTimestamp, config.maxMessageCount);
+    if (messages.length >= config.maxMessageCount) {
+      capped = true;
+    }
   }
 
   if (messages.length === 0) {
@@ -94,7 +101,11 @@ async function executeSummary(
     timeRange: formatTimeRange(messages),
   };
 
-  return await summarizeMessages(messages, meta);
+  let summary = await summarizeMessages(messages, meta);
+  if (capped) {
+    summary += `\n\n⚠️ Chỉ tóm tắt ${config.maxMessageCount} tin nhắn gần nhất (do giới hạn).`;
+  }
+  return summary;
 }
 
 export function registerSummaryHandler(bot: Bot): void {
@@ -156,6 +167,7 @@ export function registerSummaryHandler(bot: Bot): void {
     }
 
     const userId = ctx.from?.id;
+    if (!userId) return;
     const keyboard = new InlineKeyboard()
       .text("50 tin", `sum:50:${userId}`)
       .text("100 tin", `sum:100:${userId}`)

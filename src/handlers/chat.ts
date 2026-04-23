@@ -1,5 +1,5 @@
 import type { Bot } from "grammy";
-import { chatWithAI, postProcessResponse, type ChatMessage } from "../services/chat.js";
+import { chatWithAI, postProcessResponse, MAX_INPUT_CHARS, type ChatMessage } from "../services/chat.js";
 import { trackMessage } from "../services/message-tracker.js";
 import { botUserId } from "../constants.js";
 import { RateLimiter } from "../rate-limiter.js";
@@ -104,6 +104,9 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
     // Rate limit check
     const rateLimitKey = `${chatId}:${userId}`;
     if (rateLimiter.check(rateLimitKey) !== null) {
+      try {
+        await ctx.api.setMessageReaction(chatId, message.message_id, [{ type: "emoji", emoji: "🤔" }]);
+      } catch {}
       return;
     }
     rateLimiter.record(rateLimitKey);
@@ -152,13 +155,14 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
         aiResponse = await chatWithAI(cleanText, context, groupContext);
       } catch (err) {
         console.error("[Chat] AI error:", err);
+        rateLimiter.unrecord(rateLimitKey);
         await ctx.api.editMessageText(chatId, reply.message_id, "lỗi rồi, thử lại sau đi");
         trackMessage(chatId, reply.message_id);
         return;
       }
 
       const processed = postProcessResponse(aiResponse);
-      addToMemory(chatId, "user", cleanText.length > 1000 ? cleanText.slice(0, 1000) : cleanText);
+      addToMemory(chatId, "user", cleanText.length > MAX_INPUT_CHARS ? cleanText.slice(0, MAX_INPUT_CHARS) : cleanText);
       addToMemory(chatId, "assistant", processed);
 
       await ctx.api.editMessageText(chatId, reply.message_id, processed);
