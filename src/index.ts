@@ -6,6 +6,7 @@ import { registerSummaryHandler } from "./handlers/summary.js";
 import { registerClearHandler } from "./handlers/clear.js";
 import { registerQueryHandler } from "./handlers/query.js";
 import { registerAskHandler } from "./handlers/ask.js";
+import { registerSearchHandler } from "./handlers/search.js";
 import { registerChatHandler } from "./handlers/chat.js";
 
 // Health check HTTP server for Fly.io (keeps machine alive)
@@ -27,6 +28,7 @@ registerSummaryHandler(bot);
 registerClearHandler(bot);
 registerQueryHandler(bot, { searchMessages });
 registerAskHandler(bot, { fetchMessages });
+registerSearchHandler(bot);
 registerChatHandler(bot, { fetchMessages });
 console.log("[Bot] Handlers registered.");
 
@@ -47,6 +49,7 @@ bot.api.setMyCommands([
   { command: "summary", description: "Tóm tắt trò chuyện (VD: /summary 100, /summary 12h, /summary 1d)" },
   { command: "query", description: "Tìm kiếm tin nhắn theo từ khóa (VD: /query họp nhóm)" },
   { command: "ask", description: "Hỏi AI về nội dung trò chuyện (VD: /ask Hôm nay bàn gì?)" },
+  { command: "search", description: "Tìm kiếm web (VD: /search giá bitcoin hôm nay)" },
   { command: "clear", description: "Xóa tin nhắn bot và lệnh /summary" },
 ]).then(() => {
   console.log("[Bot] Commands registered.");

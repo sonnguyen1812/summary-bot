@@ -189,9 +189,9 @@ export async function fetchBotRelatedMessageIds(chatId: number, maxScan = 500): 
         result.push(msg.id);
         continue;
       }
-      // User's /summary or /clear commands
+      // User's bot commands that should be cleaned up
       const text = msg.text || msg.message || "";
-      if (text.startsWith("/summary") || text.startsWith("/clear")) {
+      if (text.startsWith("/summary") || text.startsWith("/clear") || text.startsWith("/search") || text.startsWith("/query") || text.startsWith("/ask")) {
         result.push(msg.id);
       }
     }

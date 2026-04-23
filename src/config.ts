@@ -40,6 +40,7 @@ export const config = {
   tgApiId: requireEnvInt("TG_API_ID"),
   tgApiHash: requireEnv("TG_API_HASH"),
   tgPhone: process.env.TG_PHONE?.trim() || undefined,
+  braveApiKey: process.env.BRAVE_API_KEY?.trim() || undefined,
   defaultMessageCount: optionalEnvNumber("DEFAULT_MESSAGE_COUNT", 50),
   maxMessageCount: optionalEnvNumber("MAX_MESSAGE_COUNT", 500),
   rateLimitSeconds: optionalEnvNumber("RATE_LIMIT_SECONDS", 30),
