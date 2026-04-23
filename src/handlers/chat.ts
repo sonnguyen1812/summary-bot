@@ -1,6 +1,7 @@
 import type { Bot } from "grammy";
-import { chatWithAI, postProcessResponse, MAX_INPUT_CHARS, type ChatMessage } from "../services/chat.js";
+import { chatWithAI, postProcessResponse, MAX_INPUT_CHARS } from "../services/chat.js";
 import { trackMessage } from "../services/message-tracker.js";
+import { addToMemory, getRecentContext } from "../services/chat-memory.js";
 import { botUserId } from "../constants.js";
 import { RateLimiter } from "../rate-limiter.js";
 import type { FetchedMessage } from "../services/telegram-client.js";
@@ -10,57 +11,6 @@ export interface ChatTelegramClient {
 }
 
 const rateLimiter = new RateLimiter(10);
-
-// Conversation memory per chat
-interface StoredMessage {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-}
-
-const chatMemory = new Map<number, StoredMessage[]>();
-const MAX_MEMORY_PER_CHAT = 30;
-const MAX_CHATS = 500;
-const MEMORY_TTL_MS = 12 * 60 * 60 * 1000;
-
-function getRecentContext(chatId: number): ChatMessage[] {
-  const messages = chatMemory.get(chatId);
-  if (!messages) return [];
-
-  const now = Date.now();
-  const fresh = messages.filter((m) => now - m.timestamp < MEMORY_TTL_MS);
-  if (fresh.length === 0) {
-    chatMemory.delete(chatId);
-    return [];
-  }
-  if (fresh.length !== messages.length) {
-    chatMemory.set(chatId, fresh);
-  }
-
-  return fresh.map(({ role, content }) => ({ role, content }));
-}
-
-function addToMemory(chatId: number, role: "user" | "assistant", content: string): void {
-  if (!chatMemory.has(chatId)) {
-    chatMemory.set(chatId, []);
-  }
-  const messages = chatMemory.get(chatId)!;
-  messages.push({ role, content, timestamp: Date.now() });
-
-  while (messages.length > MAX_MEMORY_PER_CHAT) {
-    messages.shift();
-  }
-
-  // Evict oldest chats if too many are tracked
-  if (chatMemory.size > MAX_CHATS) {
-    const now = Date.now();
-    for (const [id, msgs] of chatMemory) {
-      if (msgs.length === 0 || now - msgs[msgs.length - 1].timestamp > MEMORY_TTL_MS) {
-        chatMemory.delete(id);
-      }
-    }
-  }
-}
 
 export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient): void {
   // Fetch bot username once at startup — block first message until resolved

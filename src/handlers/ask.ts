@@ -1,6 +1,7 @@
 import type { Bot } from "grammy";
 import type { FetchedMessage } from "../services/telegram-client.js";
 import { askQuestion, isQuotaError } from "../services/summarizer.js";
+import { addToMemory } from "../services/chat-memory.js";
 import { RateLimiter } from "../rate-limiter.js";
 
 interface AskTelegramClient {
@@ -49,6 +50,9 @@ export function registerAskHandler(bot: Bot, telegramClient: AskTelegramClient):
       const messages = await telegramClient.fetchMessages(chatId, ASK_FETCH_COUNT);
 
       const answer = await askQuestion(messages, truncatedQuestion);
+
+      addToMemory(chatId, "user", `[/ask] ${truncatedQuestion}`);
+      addToMemory(chatId, "assistant", answer);
 
       await ctx.api.editMessageText(chatIdStr, loadingMsgId, answer);
     } catch (err) {

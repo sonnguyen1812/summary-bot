@@ -3,6 +3,7 @@ import { trackMessage } from "../services/message-tracker.js";
 import { webSearch, isQuotaError } from "../services/summarizer.js";
 import { TELEGRAM_MSG_LIMIT } from "../constants.js";
 import { config } from "../config.js";
+import { addToMemory } from "../services/chat-memory.js";
 import { RateLimiter } from "../rate-limiter.js";
 
 const MAX_QUERY_LENGTH = 300;
@@ -70,6 +71,9 @@ export function registerSearchHandler(bot: Bot): void {
     try {
       const result = await webSearch(truncatedQuery);
       const parts = splitMessage(result);
+
+      addToMemory(chatId, "user", `[/search] ${truncatedQuery}`);
+      addToMemory(chatId, "assistant", result);
 
       await ctx.api.editMessageText(chatIdStr, loadingMsgId, parts[0]);
       trackMessage(chatId, loadingMsgId);
