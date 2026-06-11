@@ -1,34 +1,14 @@
 import type { Bot } from "grammy";
 import { trackMessage } from "../services/message-tracker.js";
 import { webSearch, isQuotaError } from "../services/summarizer.js";
-import { TELEGRAM_MSG_LIMIT } from "../constants.js";
 import { config } from "../config.js";
 import { addToMemory } from "../services/chat-memory.js";
 import { RateLimiter } from "../rate-limiter.js";
+import { splitMessage } from "../utils.js";
 
 const MAX_QUERY_LENGTH = 300;
 
 const rateLimiter = new RateLimiter(10);
-
-function splitMessage(text: string): string[] {
-  if (text.length <= TELEGRAM_MSG_LIMIT) return [text];
-  const parts: string[] = [];
-  let remaining = text;
-  while (remaining.length > 0) {
-    if (remaining.length <= TELEGRAM_MSG_LIMIT) {
-      parts.push(remaining);
-      break;
-    }
-    let splitAt = remaining.lastIndexOf("\n", TELEGRAM_MSG_LIMIT);
-    if (splitAt <= 0) {
-      splitAt = remaining.lastIndexOf(" ", TELEGRAM_MSG_LIMIT);
-      if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
-    }
-    parts.push(remaining.slice(0, splitAt));
-    remaining = remaining.slice(splitAt).trimStart();
-  }
-  return parts;
-}
 
 export function registerSearchHandler(bot: Bot): void {
   bot.command("search", async (ctx) => {

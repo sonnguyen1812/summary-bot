@@ -1,6 +1,6 @@
 import type { Bot } from "grammy";
-import { TELEGRAM_MSG_LIMIT } from "../constants.js";
 import { RateLimiter } from "../rate-limiter.js";
+import { splitMessage, withTimeout, MTPROTO_TIMEOUT_MS } from "../utils.js";
 
 interface QueryTelegramClient {
   searchMessages(chatId: number, keyword: string, limit: number): Promise<{ senderName: string; username: string | null; text: string; timestamp: number }[]>;
@@ -52,7 +52,11 @@ export function registerQueryHandler(bot: Bot, telegramClient: QueryTelegramClie
 
     rateLimiter.record(userId);
     try {
-      const messages = await telegramClient.searchMessages(chatId, truncatedKeyword, QUERY_RESULT_LIMIT);
+      const messages = await withTimeout(
+        telegramClient.searchMessages(chatId, truncatedKeyword, QUERY_RESULT_LIMIT),
+        MTPROTO_TIMEOUT_MS,
+        "query.searchMessages"
+      );
 
       if (messages.length === 0) {
         await ctx.reply(`Không tìm thấy tin nhắn nào chứa từ khóa "${truncatedKeyword}".`);
@@ -68,24 +72,9 @@ export function registerQueryHandler(bot: Bot, telegramClient: QueryTelegramClie
       const body = lines.join("\n");
       const fullText = header + body;
 
-      if (fullText.length <= TELEGRAM_MSG_LIMIT) {
-        await ctx.reply(fullText);
-      } else {
-        // Split into chunks that fit within Telegram's limit
-        let remaining = fullText;
-        while (remaining.length > 0) {
-          if (remaining.length <= TELEGRAM_MSG_LIMIT) {
-            await ctx.reply(remaining);
-            break;
-          }
-          let splitAt = remaining.lastIndexOf("\n", TELEGRAM_MSG_LIMIT);
-          if (splitAt <= 0) {
-            splitAt = remaining.lastIndexOf(" ", TELEGRAM_MSG_LIMIT);
-            if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
-          }
-          await ctx.reply(remaining.slice(0, splitAt));
-          remaining = remaining.slice(splitAt).trimStart();
-        }
+      const parts = splitMessage(fullText);
+      for (const part of parts) {
+        await ctx.reply(part);
       }
     } catch (err) {
       console.error("[Query] MTProto search error:", err);

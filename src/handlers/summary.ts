@@ -4,29 +4,8 @@ import { config } from "../config.js";
 import { fetchMessages, fetchMessagesSince } from "../services/telegram-client.js";
 import { summarizeMessages, isQuotaError, type SummaryMeta } from "../services/summarizer.js";
 import { trackMessage } from "../services/message-tracker.js";
-import { TELEGRAM_MSG_LIMIT } from "../constants.js";
 import { RateLimiter } from "../rate-limiter.js";
-
-function splitMessage(text: string): string[] {
-  if (text.length <= TELEGRAM_MSG_LIMIT) return [text];
-  const parts: string[] = [];
-  let remaining = text;
-  while (remaining.length > 0) {
-    if (remaining.length <= TELEGRAM_MSG_LIMIT) {
-      parts.push(remaining);
-      break;
-    }
-    // Try to split at last newline before limit
-    let splitAt = remaining.lastIndexOf("\n", TELEGRAM_MSG_LIMIT);
-    if (splitAt <= 0) {
-      splitAt = remaining.lastIndexOf(" ", TELEGRAM_MSG_LIMIT);
-      if (splitAt <= 0) splitAt = TELEGRAM_MSG_LIMIT;
-    }
-    parts.push(remaining.slice(0, splitAt));
-    remaining = remaining.slice(splitAt).trimStart();
-  }
-  return parts;
-}
+import { splitMessage, withTimeout, MTPROTO_TIMEOUT_MS } from "../utils.js";
 
 const rateLimiter = new RateLimiter(config.rateLimitSeconds);
 const pendingKeyboards = new Map<string, ReturnType<typeof setTimeout>>();
@@ -83,9 +62,17 @@ async function executeSummary(
   let messages;
   let capped = false;
   if (query.type === "count") {
-    messages = await fetchMessages(chatId, query.count);
+    messages = await withTimeout(
+      fetchMessages(chatId, query.count),
+      MTPROTO_TIMEOUT_MS,
+      "summary.fetchMessages"
+    );
   } else {
-    messages = await fetchMessagesSince(chatId, query.sinceTimestamp, config.maxMessageCount);
+    messages = await withTimeout(
+      fetchMessagesSince(chatId, query.sinceTimestamp, config.maxMessageCount),
+      MTPROTO_TIMEOUT_MS,
+      "summary.fetchMessagesSince"
+    );
     if (messages.length >= config.maxMessageCount) {
       capped = true;
     }
@@ -183,16 +170,19 @@ export function registerSummaryHandler(bot: Bot): void {
     trackMessage(chatId, sentMsg.message_id);
 
     // Auto-delete keyboard after 30s if no one clicks
+    const timerKey = `${chatId}:${sentMsg.message_id}`;
     const autoDeleteTimer = setTimeout(async () => {
       try {
         await ctx.api.deleteMessage(chatId, sentMsg.message_id);
       } catch {
         // Message already deleted or edited — ignore
+      } finally {
+        pendingKeyboards.delete(timerKey);
       }
     }, 30_000);
 
     // Store timer so callback handler can cancel it
-    pendingKeyboards.set(`${chatId}:${sentMsg.message_id}`, autoDeleteTimer);
+    pendingKeyboards.set(timerKey, autoDeleteTimer);
   });
 
   bot.callbackQuery(/^sum:([^:]+):(\d+)$/, async (ctx) => {

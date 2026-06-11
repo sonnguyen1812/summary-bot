@@ -3,6 +3,7 @@ import type { FetchedMessage } from "../services/telegram-client.js";
 import { askQuestion, isQuotaError } from "../services/summarizer.js";
 import { addToMemory } from "../services/chat-memory.js";
 import { RateLimiter } from "../rate-limiter.js";
+import { withTimeout, MTPROTO_TIMEOUT_MS } from "../utils.js";
 
 interface AskTelegramClient {
   fetchMessages(chatId: number, limit: number): Promise<FetchedMessage[]>;
@@ -35,7 +36,7 @@ export function registerAskHandler(bot: Bot, telegramClient: AskTelegramClient):
     const userId = ctx.from?.id?.toString();
     if (!userId) return;
 
-    const remaining = rateLimiter.check(userId);
+    const remaining = rateLimiter.check(chatIdStr);
     if (remaining !== null) {
       await ctx.reply(`Vui lòng chờ ${remaining} giây trước khi hỏi lại.`);
       return;
@@ -45,9 +46,13 @@ export function registerAskHandler(bot: Bot, telegramClient: AskTelegramClient):
     const loadingMsg = await ctx.reply("💭 Đang phân tích...");
     const loadingMsgId = loadingMsg.message_id;
 
-    rateLimiter.record(userId);
+    rateLimiter.record(chatIdStr);
     try {
-      const messages = await telegramClient.fetchMessages(chatId, ASK_FETCH_COUNT);
+      const messages = await withTimeout(
+        telegramClient.fetchMessages(chatId, ASK_FETCH_COUNT),
+        MTPROTO_TIMEOUT_MS,
+        "ask.fetchMessages"
+      );
 
       const answer = await askQuestion(messages, truncatedQuestion);
 

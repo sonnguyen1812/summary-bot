@@ -5,6 +5,7 @@ import { addToMemory, getRecentContext } from "../services/chat-memory.js";
 import { botUserId } from "../constants.js";
 import { RateLimiter } from "../rate-limiter.js";
 import type { FetchedMessage } from "../services/telegram-client.js";
+import { withTimeout, MTPROTO_TIMEOUT_MS } from "../utils.js";
 
 export interface ChatTelegramClient {
   fetchMessages(chatId: number, limit: number): Promise<FetchedMessage[]>;
@@ -76,15 +77,21 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
       return;
     }
 
+    let reply: Awaited<ReturnType<typeof ctx.reply>> | null = null;
     try {
-      const reply = await ctx.reply("⏳", {
+      reply = await ctx.reply("⏳", {
         reply_parameters: { message_id: message.message_id },
       });
+      trackMessage(chatId, reply.message_id);
 
       // Fetch recent group messages for context
       let groupContext: string | undefined;
       try {
-        const recentMessages = await telegramClient.fetchMessages(chatId, 50);
+        const recentMessages = await withTimeout(
+          telegramClient.fetchMessages(chatId, 50),
+          MTPROTO_TIMEOUT_MS,
+          "chat.fetchMessages"
+        );
         const lines = recentMessages
           .filter((m) => m.text.trim().length > 0)
           .map((m) => {
@@ -107,7 +114,6 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
         console.error("[Chat] AI error:", err);
         rateLimiter.unrecord(rateLimitKey);
         await ctx.api.editMessageText(chatId, reply.message_id, "lỗi rồi, thử lại sau đi");
-        trackMessage(chatId, reply.message_id);
         return;
       }
 
@@ -116,9 +122,9 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
       addToMemory(chatId, "assistant", processed);
 
       await ctx.api.editMessageText(chatId, reply.message_id, processed);
-      trackMessage(chatId, reply.message_id);
     } catch (err) {
       console.error("[Chat] Handler error:", err);
+      // reply already tracked when created — /clear can still find it
     }
   });
 }

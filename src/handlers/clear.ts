@@ -1,6 +1,7 @@
 import type { Bot } from "grammy";
 import { clearTracked } from "../services/message-tracker.js";
 import { RateLimiter } from "../rate-limiter.js";
+import { withTimeout, MTPROTO_TIMEOUT_MS } from "../utils.js";
 
 interface ClearTelegramClient {
   fetchBotRelatedMessageIds(chatId: number): Promise<number[]>;
@@ -42,7 +43,18 @@ export function registerClearHandler(bot: Bot, telegramClient: ClearTelegramClie
     rateLimiter.record(userId.toString());
 
     // Fetch all bot messages + command messages via MTProto
-    const messageIds = await telegramClient.fetchBotRelatedMessageIds(chatId);
+    let messageIds: number[];
+    try {
+      messageIds = await withTimeout(
+        telegramClient.fetchBotRelatedMessageIds(chatId),
+        MTPROTO_TIMEOUT_MS,
+        "clear.fetchBotRelatedMessageIds"
+      );
+    } catch (err) {
+      console.error("[Clear] Failed to fetch message IDs:", err);
+      await ctx.reply("Không thể lấy danh sách tin nhắn. Vui lòng thử lại sau.");
+      return;
+    }
 
     let deleted = 0;
     // Telegram supports deleting up to 100 messages at once
