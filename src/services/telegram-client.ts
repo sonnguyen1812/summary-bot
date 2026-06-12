@@ -12,20 +12,21 @@ export const SESSION_FILE = resolve(__dirname, "../../data/session.txt");
 
 let client: TelegramClient;
 
-export function loadSession(): StringSession {
-  // Try file first, then fall back to env var (useful for cloud deployments)
+export function loadSession(): { session: StringSession; hasSession: boolean } {
   if (existsSync(SESSION_FILE)) {
     const saved = readFileSync(SESSION_FILE, "utf-8").trim();
     if (saved.length > 0) {
-      return new StringSession(saved);
+      console.log(`[MTProto] Loaded session from file (${saved.length} chars).`);
+      return { session: new StringSession(saved), hasSession: true };
     }
   }
   const envSession = process.env.TG_SESSION?.trim();
   if (envSession) {
-    console.log("[MTProto] Loading session from TG_SESSION env var.");
-    return new StringSession(envSession);
+    console.log(`[MTProto] Loading session from TG_SESSION env var (${envSession.length} chars).`);
+    return { session: new StringSession(envSession), hasSession: true };
   }
-  return new StringSession("");
+  console.log("[MTProto] No session found (no file, no TG_SESSION env var).");
+  return { session: new StringSession(""), hasSession: false };
 }
 
 function saveSession(): void {
@@ -35,14 +36,13 @@ function saveSession(): void {
 }
 
 export async function initTelegramClient(): Promise<void> {
-  const session = loadSession();
+  const { session, hasSession } = loadSession();
 
   client = new TelegramClient(session, config.tgApiId, config.tgApiHash, {
     connectionRetries: 5,
   });
 
-  if (session.getAuthKey() !== undefined) {
-    // Existing session — just connect
+  if (hasSession) {
     await client.connect();
     console.log("[MTProto] Connected with existing session.");
   } else {

@@ -17,7 +17,7 @@ const prompt = (q: string): Promise<string> =>
   new Promise((resolve) => rl.question(q, (ans) => resolve(ans)));
 
 async function main() {
-  const session = loadSession();
+  const { session } = loadSession();
   const client = new TelegramClient(session, API_ID, API_HASH, {
     connectionRetries: 5,
   });
