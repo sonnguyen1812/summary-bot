@@ -1,5 +1,5 @@
 import type { Bot } from "grammy";
-import { chatWithAI, postProcessResponse, MAX_INPUT_CHARS } from "../services/chat.js";
+import { chatWithAI, MAX_INPUT_CHARS } from "../services/chat.js";
 import { trackMessage } from "../services/message-tracker.js";
 import { addToMemory, getRecentContext } from "../services/chat-memory.js";
 import { botUserId } from "../constants.js";
@@ -34,8 +34,7 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
     const text = message.text ?? message.caption ?? "";
     const userId = ctx.from?.id;
     const chatId = ctx.chat.id;
-
-    if (!userId) return;
+    const senderName = ctx.from?.first_name || ctx.from?.username || "ai đó";
 
     // Check if message mentions the bot by @username
     const usernameLower = botUsername?.toLowerCase();
@@ -92,8 +91,10 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
           MTPROTO_TIMEOUT_MS,
           "chat.fetchMessages"
         );
+        const botUsernameLower = botUsername?.toLowerCase();
         const lines = recentMessages
           .filter((m) => m.text.trim().length > 0)
+          .filter((m) => !botUsernameLower || m.username?.toLowerCase() !== botUsernameLower)
           .map((m) => {
             const d = new Date(m.timestamp * 1000);
             const hh = String(d.getHours()).padStart(2, "0");
@@ -117,11 +118,10 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
         return;
       }
 
-      const processed = postProcessResponse(aiResponse);
-      addToMemory(chatId, "user", cleanText.length > MAX_INPUT_CHARS ? cleanText.slice(0, MAX_INPUT_CHARS) : cleanText);
-      addToMemory(chatId, "assistant", processed);
+      addToMemory(chatId, "user", cleanText.length > MAX_INPUT_CHARS ? cleanText.slice(0, MAX_INPUT_CHARS) : cleanText, senderName);
+      addToMemory(chatId, "assistant", aiResponse);
 
-      await ctx.api.editMessageText(chatId, reply.message_id, processed);
+      await ctx.api.editMessageText(chatId, reply.message_id, aiResponse);
     } catch (err) {
       console.error("[Chat] Handler error:", err);
       // reply already tracked when created — /clear can still find it
