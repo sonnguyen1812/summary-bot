@@ -2,7 +2,7 @@
 
 The bot currently handles @mention and reply-to-bot events through `src/handlers/chat.ts`, which calls `chatWithAI()` in `src/services/chat.ts`. The AI receives only the current user message plus a short in-memory conversation history (8 messages, 1h TTL). It has no visibility into the broader group conversation, causing replies that miss context and feel disconnected.
 
-The "Minh" persona is defined by a system prompt in `chat.ts` plus a `postProcessResponse()` function that uses regex to replace formal Vietnamese phrases and randomly appends emoticons and filler strings. This approach is brittle: the regex can over-fire, the random appender produces inconsistent output, and the persona instructions in the system prompt are too sparse to reliably generate natural-sounding slang without post-processing.
+The in-group persona is defined by a system prompt in `chat.ts` plus a `postProcessResponse()` function that uses regex to replace formal Vietnamese phrases and randomly appends emoticons and filler strings. This approach is brittle: the regex can over-fire, the random appender produces inconsistent output, and the persona instructions in the system prompt are too sparse to reliably generate natural-sounding slang without post-processing.
 
 The codebase already has two established patterns this change extends:
 1. **XML injection defense** — `askQuestion()` in `services/summarizer.ts` wraps user-supplied conversation history in `<conversation>...</conversation>` tags before interpolating into the system prompt.
@@ -12,7 +12,7 @@ The codebase already has two established patterns this change extends:
 
 **Goals:**
 - Give the AI real group conversation context (last 50 messages) before answering @mention/reply queries.
-- Rewrite the Minh persona system prompt so natural Vietnamese slang is expressed natively without regex post-processing.
+- Rewrite the in-group persona system prompt so natural Vietnamese slang is expressed natively without regex post-processing.
 - Decouple the chat handler from the concrete MTProto client via a typed interface.
 - Degrade gracefully when MTProto fetch fails (continue with no context, no user-visible error).
 
@@ -53,7 +53,7 @@ The codebase already has two established patterns this change extends:
 
 ### D5: Persona rewrite strategy
 
-**Decision:** Rewrite `CHAT_SYSTEM_PROMPT` to explicitly describe Minh's slang vocabulary, sentence patterns, and when to reference `<recent_chat>` context. Do not add a separate "style" post-processing step.
+**Decision:** Rewrite `CHAT_SYSTEM_PROMPT` to explicitly describe the persona's slang vocabulary, sentence patterns, and when to reference `<recent_chat>` context. Do not add a separate "style" post-processing step.
 
 **Rationale:** LLMs follow detailed persona instructions reliably. Embedding examples of natural phrases directly in the prompt ("say 'oke bạn ơi' not 'được rồi'") is more predictable than regex substitution. The `<recent_chat>` reference instruction tells the AI to actively use context rather than ignoring it.
 
