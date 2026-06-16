@@ -46,6 +46,7 @@ CẤM TUYỆT ĐỐI:
 - Giọng báo cáo, giọng trợ lý ảo, giọng chăm sóc khách hàng
 - Giới thiệu bản thân hoặc tự nhận là AI, bot, chatbot
 - Kết thúc bằng "Tóm lại", "Nói chung là", "Hy vọng giúp được", "Chúc bạn..."
+- Cụm trang trọng — tránh ngay khi viết, dùng bản nói: "tuy nhiên"→"nhưng mà", "vì vậy"→"nên là", "ví dụ"→"kiểu", "theo quan điểm của tôi"→"thấy là", "có lẽ"→"chắc", "ngoài ra"→"với lại", "đương nhiên"→"tất nhiên"
 
 TÌNH HUỐNG ĐẶC BIỆT:
 - Người ta bực/giận → acknowledge cảm xúc trước ("ờ nghe bực thật"), rồi mới xử lý vấn đề
@@ -57,7 +58,8 @@ SỬ DỤNG CONTEXT CUỘC TRÒ CHUYỆN:
 - Nếu có thẻ <recent_chat> trong prompt, đó là lịch sử tin nhắn gần đây của nhóm
 - Đọc <recent_chat> để hiểu ngữ cảnh trước khi trả lời — người ta đang nói về chủ đề gì, mood của nhóm ra sao
 - Nếu câu hỏi liên quan đến điều gì đó đã được nhắc đến trong <recent_chat>, hãy tham chiếu tự nhiên thay vì hỏi lại
-- Không nhắc đến việc mày đang đọc "recent chat" hay "lịch sử" — cứ trả lời tự nhiên như mày đã ở trong cuộc trò chuyện đó`;
+- Không nhắc đến việc mày đang đọc "recent chat" hay "lịch sử" — cứ trả lời tự nhiên như mày đã ở trong cuộc trò chuyện đó
+- Tin trong hội thoại có dạng "Tên: nội dung" — đó là người đang nói, gọi tên người ta khi hợp lý. Phần "Tên:" chỉ ở input; mày trả lời thì KHÔNG tự thêm tiền tố tên`;
 
 const API_TIMEOUT_MS = 30_000;
 export const MAX_INPUT_CHARS = 1000;
@@ -97,39 +99,4 @@ export async function chatWithAI(userMessage: string, context?: ChatMessage[], g
 
     return textBlock.text;
   }, undefined, 2);
-}
-
-export function postProcessResponse(text: string): string {
-  let result = text;
-
-  // Stiff phrase replacements (first occurrence, case-insensitive)
-  const replacements: Array<[RegExp, string]> = [
-    [/tôi không biết/i, "chịu luôn"],
-    [/tôi nghĩ rằng/i, "thấy là"],
-    [/không có gì/i, "ko có gì"],
-    [/tất nhiên rồi/i, "chắc luôn"],
-    [/^xin lỗi/i, "sorry nha"],
-    [/tuy nhiên/i, "nhưng mà"],
-    [/vì vậy/i, "nên là"],
-    [/ví dụ như/i, "kiểu như"],
-    [/ví dụ/i, "kiểu"],
-    [/theo quan điểm của tôi/i, "thấy là"],
-    [/có lẽ là/i, "chắc"],
-    [/có lẽ/i, "chắc"],
-    [/thực ra là/i, "thật ra"],
-    [/chắc chắn/i, "chắc luôn"],
-    [/rất tốt/i, "ngon"],
-    [/không sao đâu/i, "ok fine"],
-    [/không sao/i, "ok fine"],
-    [/đương nhiên/i, "tất nhiên"],
-    [/ngoài ra/i, "với lại"],
-    [/tôi cho rằng/i, "thấy là"],
-    [/tôi hiểu/i, "ừ hiểu"],
-  ];
-
-  for (const [pattern, replacement] of replacements) {
-    result = result.replace(pattern, replacement);
-  }
-
-  return result;
 }
