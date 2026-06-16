@@ -20,19 +20,6 @@ export function registerClearHandler(bot: Bot, telegramClient: ClearTelegramClie
     const userId = ctx.from?.id;
     if (!userId) return;
 
-    // Admin-only check
-    try {
-      const member = await ctx.api.getChatMember(chatId, userId);
-      if (member.status !== "administrator" && member.status !== "creator") {
-        await ctx.reply("Chỉ admin mới có thể xóa tin nhắn bot.");
-        return;
-      }
-    } catch (err) {
-      console.warn("[Clear] Failed to check admin status:", err);
-      await ctx.reply("Không thể kiểm tra quyền admin. Vui lòng thử lại sau.");
-      return;
-    }
-
     const remaining = rateLimiter.check(userId.toString());
     if (remaining !== null) {
       await ctx.reply(`Vui lòng chờ ${remaining} giây trước khi dùng lệnh này lại.`);
