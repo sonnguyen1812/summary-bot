@@ -4,12 +4,13 @@ interface StoredMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  name?: string;
 }
 
 const chatMemory = new Map<number, StoredMessage[]>();
-const MAX_MEMORY_PER_CHAT = 30;
+const MAX_MEMORY_PER_CHAT = 50;
 const MAX_CHATS = 500;
-const MEMORY_TTL_MS = 12 * 60 * 60 * 1000;
+const MEMORY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_MEMORY_CONTENT = 2000;
 
 export function getRecentContext(chatId: number): ChatMessage[] {
@@ -26,10 +27,13 @@ export function getRecentContext(chatId: number): ChatMessage[] {
     chatMemory.set(chatId, fresh);
   }
 
-  return fresh.map(({ role, content }) => ({ role, content }));
+  return fresh.map(({ role, content, name }) => ({
+    role,
+    content: role === "user" && name ? `${name}: ${content}` : content,
+  }));
 }
 
-export function addToMemory(chatId: number, role: "user" | "assistant", content: string): void {
+export function addToMemory(chatId: number, role: "user" | "assistant", content: string, name?: string): void {
   const truncated = content.length > MAX_MEMORY_CONTENT
     ? content.slice(0, MAX_MEMORY_CONTENT) + "…"
     : content;
@@ -38,7 +42,7 @@ export function addToMemory(chatId: number, role: "user" | "assistant", content:
     chatMemory.set(chatId, []);
   }
   const messages = chatMemory.get(chatId)!;
-  messages.push({ role, content: truncated, timestamp: Date.now() });
+  messages.push({ role, content: truncated, timestamp: Date.now(), name });
 
   while (messages.length > MAX_MEMORY_PER_CHAT) {
     messages.shift();

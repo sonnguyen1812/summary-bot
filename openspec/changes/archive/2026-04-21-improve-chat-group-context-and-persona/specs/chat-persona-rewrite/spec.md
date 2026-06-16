@@ -4,7 +4,7 @@
 The `CHAT_SYSTEM_PROMPT` in `services/chat.ts` SHALL contain explicit vocabulary examples and sentence-pattern guidance so the AI produces natural Vietnamese slang without requiring regex post-processing.
 
 #### Scenario: AI uses casual vocabulary without post-processing
-- **WHEN** the AI generates a reply under the Minh persona
+- **WHEN** the AI generates a reply under the in-group persona
 - **THEN** the reply uses casual Vietnamese forms (e.g., "oke", "vậy á", "hiểu rồi", "bro", "tao/mày" register where appropriate)
 - **THEN** no regex substitution is needed to convert formal phrasing to casual
 

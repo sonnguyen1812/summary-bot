@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add optional `groupContext?: string` parameter to the `chatWithAI()` function signature
 - [x] 1.2 When `groupContext` is provided, append `<recent_chat>\n{groupContext}\n</recent_chat>` to the system prompt string before the Anthropic API call
-- [x] 1.3 Rewrite `CHAT_SYSTEM_PROMPT` — give Minh a vivid personality description, embed explicit casual Vietnamese vocabulary examples, and add an instruction to reference `<recent_chat>` context when relevant
+- [x] 1.3 Rewrite `CHAT_SYSTEM_PROMPT` — give the persona a vivid personality description, embed explicit casual Vietnamese vocabulary examples, and add an instruction to reference `<recent_chat>` context when relevant
 - [x] 1.4 Remove the randomized emoticon/filler appending block from `postProcessResponse()` while keeping all phrase-substitution mappings ← (verify: `postProcessResponse()` no longer appends any suffix, phrase substitutions still apply, and the function signature is unchanged)
 
 ## 2. Update `handlers/chat.ts`
