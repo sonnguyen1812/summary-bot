@@ -34,6 +34,9 @@ export function registerChatHandler(bot: Bot, telegramClient: ChatTelegramClient
     const text = message.text ?? message.caption ?? "";
     const userId = ctx.from?.id;
     const chatId = ctx.chat.id;
+
+    if (!userId) return;
+
     const senderName = ctx.from?.first_name || ctx.from?.username || "ai đó";
 
     // Check if message mentions the bot by @username
